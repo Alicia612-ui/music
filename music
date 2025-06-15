@@ -1,0 +1,35 @@
+-- 提示用户输入音乐链接
+print("请输入音乐链接:")
+local music_url = io.read()  -- 从标准输入读取用户输入
+
+-- 检查输入是否为空
+if not music_url or music_url == "" then
+    print("错误：未输入音乐链接")
+    os.exit(1)
+end
+
+-- 播放音乐的函数（需要实际实现）
+local function play_music(url)
+    -- 这里需要根据你的系统环境实现实际的播放逻辑
+    -- 以下是几种可能的实现方式：
+    
+    -- 方法1：使用系统命令（如mpv播放器）
+    -- os.execute('mpv "' .. url .. '" >/dev/null 2>&1 &')
+    
+    -- 方法2：使用Lua的音频库（如luasound）
+    -- 需要先安装luasound库：luarocks install luasound
+    -- local snd = require("luasound")
+    -- snd.play_url(url)
+    
+    print("正在播放: " .. url)  -- 仅打印信息，实际需要实现播放功能
+end
+
+-- 死循环播放音乐
+print("开始播放音乐，按Ctrl+C停止...")
+while true do
+    play_music(music_url)
+    -- 可以添加延迟以避免过于频繁的重试
+    -- os.execute("sleep 1")  -- Unix-like系统
+    -- 或者对于Windows:
+    -- os.execute("ping -n 2 127.0.0.1 > nul")
+end
