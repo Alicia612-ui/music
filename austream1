@@ -80,6 +80,7 @@ else
     end
 end
 
+-- 提前解码音频数据（避免重复解码）
 local iter, length
 if type(v.type) == "string" then v.type = v.type:lower() end
 if v.type == "dfpwm" or path:lower():match("%.dfpwm$") then iter, length = aukit.stream.dfpwm(data, v.sampleRate, v.channels, mono)
@@ -93,20 +94,31 @@ elseif v.type == "pcm" or path:lower():match("%.pcm$") or path:lower():match("%.
 else error("Unknown file type. Make sure to add the right file extension to the path/URL.") end
 if length == nil then length = 0 end
 
-print("Streaming...")
+print("Streaming... (Press Ctrl+T to stop)")
 local w = term.getSize()
 local y = select(2, term.getCursorPos())
 local fg, bg = colors.toBlit(term.getTextColor()), colors.toBlit(term.getBackgroundColor())
-term.write(("00:00 %s %02d:%02d"):format(("\127"):rep(w - 12), math.floor(length / 60), length % 60))
-aukit.play(iter, function(pos)
-    pos = math.min(pos, 5999)
-    local p = pos / length
-    term.setCursorPos(1, y)
-    if p > 1 then
-        term.blit(("%02d:%02d %s --:--"):format(math.floor(pos / 60), pos % 60, (" "):rep(w - 12)), fg:rep(w), bg:rep(6) .. fg:rep(w - 12) .. bg:rep(6))
-    else
-        term.blit(("%02d:%02d %s%s %02d:%02d"):format(math.floor(pos / 60), pos % 60, (" "):rep(math.floor((w - 12) * p)), ("\127"):rep((w - 12) - math.floor((w - 12) * p)), math.floor(length / 60), length % 60),
-            fg:rep(w), bg:rep(6) .. fg:rep(math.floor((w - 12) * p)) .. bg:rep((w - 12) - math.floor((w - 12) * p) + 6))
-    end
-end, v.volume, table.unpack(speakers))
-print()
+
+-- 定义播放函数（使用已解码的 iter 和 length）
+local function playAudio()
+    aukit.play(iter, function(pos)
+        pos = math.min(pos, 5999)
+        local p = pos / length
+        term.setCursorPos(1, y)
+        if p > 1 then
+            term.blit(("%02d:%02d %s --:--"):format(math.floor(pos / 60), pos % 60, (" "):rep(w - 12)), fg:rep(w), bg:rep(6) .. fg:rep(w - 12) .. bg:rep(6))
+        else
+            term.blit(("%02d:%02d %s%s %02d:%02d"):format(math.floor(pos / 60), pos % 60, (" "):rep(math.floor((w - 12) * p)), ("\127"):rep((w - 12) - math.floor((w - 12) * p)), math.floor(length / 60), length % 60),
+                fg:rep(w), bg:rep(6) .. fg:rep(math.floor((w - 12) * p)) .. bg:rep((w - 12) - math.floor((w - 12) * p) + 6))
+        end
+    end, v.volume, table.unpack(speakers))
+end
+
+-- 循环播放（通过终止信号退出）
+while true do
+    playAudio()
+    -- 监听终止信号（模拟按下 Ctrl+T）
+    local ev = os.pullEvent("terminate")
+    print("\nStopped.")
+    return
+end
