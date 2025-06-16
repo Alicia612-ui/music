@@ -36,7 +36,7 @@ local function initAudio()
         if path ~= "" and id >= 0 then rednet.send(id, name, proto) end
         error("Rednet streaming not supported in loop mode")
     else
-        path = shell.resolve(path)  -- 修复：直接解析 path，而不是 ...
+        path = shell.resolve(path)
         local file, err = fs.open(path, "rb")
         if not file then error("Could not open " .. path .. ": " .. err) end
         data = file.readAll()
@@ -86,15 +86,13 @@ while isPlaying do
     local iter, length = initAudio()
     playAudio(iter, length)
     
-    -- 等待播放完成或终止信号
-    local timeout = os.startTimer(0.1)
-    while true do
+    -- 估算播放时间并等待
+    local duration = length / (v.sampleRate or 44100)  -- 估算播放时长（秒）
+    local startTime = os.clock()
+    while os.clock() - startTime < duration do
         local ev, p1 = os.pullEvent()
-        if ev == "timer" and p1 == timeout then
-            -- 检查播放是否完成（需要aukit支持状态查询）
-            if not aukit.isPlaying() then break end
-        elseif ev == "terminate" then
-            aukit.stop()
+        if ev == "terminate" then
+            aukit.stop()  -- 假设 aukit 有 stop 方法
             print("\nStopped.")
             isPlaying = false
             break
