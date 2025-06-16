@@ -1,14 +1,1 @@
--- 提示用户输入音频链接
-print("请输入音频链接（输入'quit'退出）：")
-io.write("> ")
-local url = io.read()
-
-if url:lower() == "quit" then
-    print("程序已退出")
-    return
-end
-
--- 构造并执行 speaker play 命令
-local command = "speaker play " .. url
-print("正在播放：" .. url)
-os.execute(command)
+print("123")
