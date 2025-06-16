@@ -15,92 +15,57 @@ if params then
 end
 local mono = v.mono or #speakers == 1
 aukit.defaultInterpolation = v.interpolation or aukit.defaultInterpolation
-local data
-if path:match("^https?://") then
-    local handle, err = http.get(path, nil, true)
-    if not handle then error("Could not connect to " .. path .. ": " .. err) end
-    local code = handle.getResponseCode()
-    if code ~= 200 then handle.close() error("Could not connect to " .. path .. ": HTTP " .. code) end
-    if v.streamData then
-        local closed = false
-        function data()
-            if closed then return nil end
-            local d = handle.read(48000)
-            if not d then handle.close() closed = true return nil end
-            return d
-        end
-    else
+
+-- 封装音频加载和解码逻辑
+local function initAudio()
+    local data
+    if path:match("^https?://") then
+        local handle, err = http.get(path, nil, true)
+        if not handle then error("Could not connect to " .. path .. ": " .. err) end
+        local code = handle.getResponseCode()
+        if code ~= 200 then handle.close() error("Could not connect to " .. path .. ": HTTP " .. code) end
         data = handle.readAll()
         handle.close()
-    end
-elseif path:match("^wss?://") then
-    local handle, err = http.websocket(path)
-    if not handle then error("Could not connect to " .. path .. ": " .. err) end
-    local closed = false
-    function data()
-        local _ = handle -- keep the handle alive
-        if closed then return nil end
-        while true do
-            local ev, url, msg, binary = os.pullEvent()
-            if ev == "websocket_message" and url == path then
-                if not binary then print("Warning: Text message detected! This audio may be corrupt.") end
-                return msg
-            elseif ev == "websocket_closed" and url == path then
-                closed = true
-                return nil
-            end
-        end
-    end
-elseif path:match("^rednet://%d+") or path:match("^rednet%+%l+://%d+") then
-    peripheral.find("modem", rednet.open)
-    local proto, id, name = path:match("^rednet%+?(%l*)://(%d+)(/?.*)$")
-    id = tonumber(id)
-    if proto == "" then proto = nil end
-    if path ~= "" and id >= 0 then rednet.send(id, name, proto) end
-    function data()
-        local i, msg
-        repeat i, msg = rednet.receive(proto) until id == -1 or i == id
-        return msg
-    end
-else
-    path = shell.resolve(...)
-    local file, err = fs.open(path, "rb")
-    if not file then error("Could not open " .. path .. ": " .. err) end
-    if v.streamData then
-        local closed = false
-        function data()
-            if closed then return nil end
-            local d = file.read(48000)
-            if not d then file.close() closed = true return nil end
-            return d
-        end
+    elseif path:match("^wss?://") then
+        error("Websocket streaming not supported in loop mode")
+    elseif path:match("^rednet://%d+") or path:match("^rednet%+%l+://%d+") then
+        peripheral.find("modem", rednet.open)
+        local proto, id, name = path:match("^rednet%+?(%l*)://(%d+)(/?.*)$")
+        id = tonumber(id)
+        if proto == "" then proto = nil end
+        if path ~= "" and id >= 0 then rednet.send(id, name, proto) end
+        error("Rednet streaming not supported in loop mode")
     else
+        path = shell.resolve(...)
+        local file, err = fs.open(path, "rb")
+        if not file then error("Could not open " .. path .. ": " .. err) end
         data = file.readAll()
         file.close()
     end
+
+    -- 解码音频数据
+    local iter, length
+    if type(v.type) == "string" then v.type = v.type:lower() end
+    if v.type == "dfpwm" or path:lower():match("%.dfpwm$") then iter, length = aukit.stream.dfpwm(data, v.sampleRate, v.channels, mono)
+    elseif v.type == "mdfpwm" or path:lower():match("%.mdfpwm$") then iter, length = aukit.stream.mdfpwm(data, mono)
+    elseif v.type == "wav" or path:lower():match("%.wav$") then iter, length = aukit.stream.wav(data, mono, v.ignoreHeader)
+    elseif v.type == "aiff" or path:lower():match("%.aiff?$") then iter, length = aukit.stream.aiff(data, mono, v.ignoreHeader)
+    elseif v.type == "au" or path:lower():match("%.au$") then iter, length = aukit.stream.au(data, mono, v.ignoreHeader)
+    elseif v.type == "flac" or path:lower():match("%.flac$") then iter, length = aukit.stream.flac(data, mono)
+    elseif v.type == "qoa" or path:lower():match("%.qoa$") then iter, length = aukit.stream.qoa(data, mono)
+    elseif v.type == "pcm" or path:lower():match("%.pcm$") or path:lower():match("%.raw$") or path:match("^rednet%+?%l*://") then iter, length = aukit.stream.pcm(data, v.bitDepth, v.dataType, v.channels, v.sampleRate, v.bigEndian, mono)
+    else error("Unknown file type. Make sure to add the right file extension to the path/URL.") end
+    if length == nil then length = 0 end
+    
+    return iter, length
 end
 
--- 提前解码音频数据（避免重复解码）
-local iter, length
-if type(v.type) == "string" then v.type = v.type:lower() end
-if v.type == "dfpwm" or path:lower():match("%.dfpwm$") then iter, length = aukit.stream.dfpwm(data, v.sampleRate, v.channels, mono)
-elseif v.type == "mdfpwm" or path:lower():match("%.mdfpwm$") then iter, length = aukit.stream.mdfpwm(data, mono)
-elseif v.type == "wav" or path:lower():match("%.wav$") then iter, length = aukit.stream.wav(data, mono, v.ignoreHeader)
-elseif v.type == "aiff" or path:lower():match("%.aiff?$") then iter, length = aukit.stream.aiff(data, mono, v.ignoreHeader)
-elseif v.type == "au" or path:lower():match("%.au$") then iter, length = aukit.stream.au(data, mono, v.ignoreHeader)
-elseif v.type == "flac" or path:lower():match("%.flac$") then iter, length = aukit.stream.flac(data, mono)
-elseif v.type == "qoa" or path:lower():match("%.qoa$") then iter, length = aukit.stream.qoa(data, mono)
-elseif v.type == "pcm" or path:lower():match("%.pcm$") or path:lower():match("%.raw$") or path:match("^rednet%+?%l*://") then iter, length = aukit.stream.pcm(data, v.bitDepth, v.dataType, v.channels, v.sampleRate, v.bigEndian, mono)
-else error("Unknown file type. Make sure to add the right file extension to the path/URL.") end
-if length == nil then length = 0 end
-
-print("Streaming... (Press Ctrl+T to stop)")
-local w = term.getSize()
-local y = select(2, term.getCursorPos())
-local fg, bg = colors.toBlit(term.getTextColor()), colors.toBlit(term.getBackgroundColor())
-
--- 定义播放函数（使用已解码的 iter 和 length）
-local function playAudio()
+-- 播放函数
+local function playAudio(iter, length)
+    local w = term.getSize()
+    local y = select(2, term.getCursorPos())
+    local fg, bg = colors.toBlit(term.getTextColor()), colors.toBlit(term.getBackgroundColor())
+    
     aukit.play(iter, function(pos)
         pos = math.min(pos, 5999)
         local p = pos / length
@@ -114,11 +79,25 @@ local function playAudio()
     end, v.volume, table.unpack(speakers))
 end
 
--- 循环播放（通过终止信号退出）
-while true do
-    playAudio()
-    -- 监听终止信号（模拟按下 Ctrl+T）
-    local ev = os.pullEvent("terminate")
-    print("\nStopped.")
-    return
+-- 主循环
+print("Streaming... (Press Ctrl+T to stop)")
+local isPlaying = true
+while isPlaying do
+    local iter, length = initAudio()
+    playAudio(iter, length)
+    
+    -- 等待播放完成或终止信号
+    local timeout = os.startTimer(0.1)
+    while true do
+        local ev, p1 = os.pullEvent()
+        if ev == "timer" and p1 == timeout then
+            -- 检查播放是否完成（需要aukit支持状态查询）
+            if not aukit.isPlaying() then break end
+        elseif ev == "terminate" then
+            aukit.stop()
+            print("\nStopped.")
+            isPlaying = false
+            break
+        end
+    end
 end
