@@ -36,7 +36,7 @@ local function initAudio()
         if path ~= "" and id >= 0 then rednet.send(id, name, proto) end
         error("Rednet streaming not supported in loop mode")
     else
-        path = shell.resolve(...)
+        path = shell.resolve(path)  -- 修复：直接解析 path，而不是 ...
         local file, err = fs.open(path, "rb")
         if not file then error("Could not open " .. path .. ": " .. err) end
         data = file.readAll()
