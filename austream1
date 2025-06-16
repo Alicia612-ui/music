@@ -98,4 +98,5 @@ while isPlaying do
             break
         end
     end
+os.sleep(1)  -- 每次循环后等待 1 秒
 end
