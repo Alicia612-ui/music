@@ -1,1 +1,17 @@
-print（“123”）
+local speaker = peripheral.wrap("top") -- 假设扬声器在顶部
+-- 提示用户输入 dfpwm 文件路径
+print("请输入 dfpwm 文件路径（输入'quit'退出）：")
+io.write("> ")
+local filePath = io.read()
+
+if filePath:lower() == "quit" then
+    return
+end
+
+-- 播放 dfpwm 文件
+if fs.exists(filePath) then
+    print("正在播放...")
+    dfpwm.play(filePath, speaker) -- 假设库提供 play 函数
+else
+    print("文件不存在")
+end
